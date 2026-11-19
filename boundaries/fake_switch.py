@@ -6,11 +6,20 @@ Implements the subset of networking_generic_switch's Netmiko device contract nee
   trunk subport ops, vlan_has_ports / vlan_has_vni
 
 No SSH, no netmiko — pure dict state so scheduler can inject latency/errors deterministically.
+
+Vendor policies (tracks/ngs_sim/vendor_policies.py) are checked here:
+  - Arista EOS / SONiC: VLAN must exist before VXLAN mapping (LP 2146511, 2148349)
+  - Arista: unplug requires VNI, Vxlan1/Vx1 excluded from cleanup
+
+Segment-based cleanup (LP 2144875): segments dict tracks Neutron VLAN segment UUIDs;
+  if segment_deleted → unconditional unplug, else per-switch port check.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
+from tracks.ngs_sim.vendor_policies import policy_for
 
 
 @dataclass
@@ -20,17 +29,32 @@ class SwitchState:
     port_vlan: dict[str, int] = field(default_factory=dict)  # port -> vlan
     trunk_vlans: dict[str, set[int]] = field(default_factory=dict)  # trunk port -> set(vlan)
     vlan_refcount: dict[int, int] = field(default_factory=dict)  # vlan -> ports needing it
+    # segment_id tracking for LP 2144875: vlan segment UUIDs from Neutron
+    segment_ids: dict[int, str] = field(default_factory=dict)  # vlan -> segment UUID
+    # LP 2144875 + 2146508: track whether unplug was called with wrong syntax
+    unplug_errors: list[str] = field(default_factory=list)
+    # vendor policy violations (LP 2146511): VLAN-before-VXLAN ordering
+    vendor_violations: list[str] = field(default_factory=list)
+    # LP 2146507: interfaces excluded from cleanup
+    cleanup_excludes: set[str] = field(default_factory=set)
 
 
 class FakeSwitch:
     """One switch = one physnet's view. Multi-switch tests use multiple instances."""
 
-    def __init__(self, name: str = "fake-ovs") -> None:
+    def __init__(self, name: str = "fake-ovs", device_type: str = "_default") -> None:
         self.name = name
+        self.device_type = device_type
+        self.policy = policy_for(device_type)
         self.state = SwitchState()
+        self.state.cleanup_excludes = set(self.policy.get("cleanup_excludes", set()))  # type: ignore[arg-type]
         # injectable fault: next N calls raise
         self.fail_next: int = 0
         self.fail_exc: type[Exception] = RuntimeError
+        # segment existence map: segment_id (vlan uuid) -> exists in Neutron
+        self._segment_exists: dict[int, bool] = {}
+        # VNI required check for unplug
+        self._require_vni_on_unplug = bool(self.policy.get("unplug_needs_vni", False))
 
     # fault helper
 
@@ -39,25 +63,60 @@ class FakeSwitch:
             self.fail_next -= 1
             raise self.fail_exc(f"injected {op} failure on {self.name}")
 
+    # helpers
+
+    def _check_vlan_before_vxlan(self, segmentation_id: int, vni: int) -> None:
+        if self.policy.get("vlan_before_vxlan") and segmentation_id not in self.state.vlans:
+            # Record violation — real Arista would produce "Vlan does not exist" and no IMET route
+            self.state.vendor_violations.append(
+                f"vlan-before-vxlan: {self.device_type} requires vlan {segmentation_id} before plug_switch_to_network vni {vni}"
+            )
+
     # VLAN lifecycle
 
-    def add_network(self, segmentation_id: int, network_id: str = "") -> None:
+    def add_network(self, segmentation_id: int, network_id: str = "", segment_id: str | None = None) -> None:
         self._maybe_fail("add_network")
         self.state.vlans.add(segmentation_id)
         self.state.vlan_refcount.setdefault(segmentation_id, 0)
+        if segment_id:
+            self.state.segment_ids[segmentation_id] = segment_id
+            self._segment_exists[segmentation_id] = True
 
-    def del_network(self, segmentation_id: int, network_id: str = "") -> None:
+    def del_network(
+        self,
+        segmentation_id: int,
+        network_id: str = "",
+        segment_id: str | None = None,
+        segment_exists: bool | None = None,
+    ) -> None:
         self._maybe_fail("del_network")
-        # refcount-aware: real NGS checks vlan_has_ports before delete
-        if self.state.vlan_refcount.get(segmentation_id, 0) > 0:
+        # LP 2144875 hybrid: if segment_deleted → unconditional unplug, else per-switch port check
+        if segment_exists is False:
+            # segment gone in Neutron → unconditional cleanup even if local port remains (static trunk)
+            pass
+        elif self.state.vlan_refcount.get(segmentation_id, 0) > 0:
             return
         self.state.vlans.discard(segmentation_id)
         self.state.vni_map = {k: v for k, v in self.state.vni_map.items() if v != segmentation_id}
         self.state.vlan_refcount.pop(segmentation_id, None)
+        # also remove from trunk references (static trunk case after segment delete)
+        for trunk, vlans in self.state.trunk_vlans.items():
+            vlans.discard(segmentation_id)
+        if segment_id and segment_id in self.state.segment_ids:
+            self.state.segment_ids.pop(segment_id, None)
+            self._segment_exists.pop(segmentation_id, None)
+
+    def mark_segment_deleted(self, segmentation_id: int) -> None:
+        """Simulate Neutron segment deletion (unconditional cleanup path)."""
+        self._segment_exists[segmentation_id] = False
 
     # port ops
 
     def plug_port_to_network(self, port: str, segmentation_id: int) -> None:
+        # skip excluded interfaces (LP 2146507)
+        if port in self.state.cleanup_excludes:
+            self.state.unplug_errors.append(f"port {port} is VxLAN interface, not phys port — ignored")
+            return
         self._maybe_fail("plug_port")
         self.state.port_vlan[port] = segmentation_id
         self.state.vlan_refcount[segmentation_id] = self.state.vlan_refcount.get(segmentation_id, 0) + 1
@@ -93,12 +152,20 @@ class FakeSwitch:
 
     def plug_switch_to_network(self, vni: int, segmentation_id: int) -> None:
         self._maybe_fail("plug_switch_to_network")
+        self._check_vlan_before_vxlan(segmentation_id, vni)
         self.state.vni_map[vni] = segmentation_id
         self.state.vlans.add(segmentation_id)
 
-    def unplug_switch_from_network(self, vni: int, segmentation_id: int) -> None:
+    def unplug_switch_from_network(self, vni: int | None, segmentation_id: int) -> None:
         self._maybe_fail("unplug_switch_from_network")
-        self.state.vni_map.pop(vni, None)
+        if self._require_vni_on_unplug and vni is None:
+            self.state.unplug_errors.append(f"arista requires vni on unplug vlan {segmentation_id}: no vxlan vlan {{segmentation_id}} vni {{vni}}")
+            return
+        if vni is not None:
+            self.state.vni_map.pop(vni, None)
+        else:
+            # fallback: remove any mapping to this vlan
+            self.state.vni_map = {k: v for k, v in self.state.vni_map.items() if v != segmentation_id}
 
     # queries (for N1/N2 checks)
 

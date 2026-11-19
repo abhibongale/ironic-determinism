@@ -16,6 +16,14 @@ from tracks.ngs_sim.scenario import (
     scenario_refcount_stale_vlan,
     scenario_trunk_subport,
 )
+from tracks.ngs_sim.vendor_vxlan import (
+    scenario_arista_cleanup_filter,
+    scenario_arista_unplug_needs_vni,
+    scenario_arista_vxlan_order,
+    scenario_ovn_lldp_bridge_filter,
+    scenario_segment_id_cleanup,
+    scenario_sonic_vlan_before_trunk,
+)
 from tracks.ngs_sim.vxlan import (
     scenario_geneve_multi_switch,
     scenario_vxlan_geneve_parity,
@@ -36,6 +44,13 @@ SCENARIOS = {
     "geneve_multi_switch": scenario_geneve_multi_switch,
     "vxlan_top_bottom": scenario_vxlan_top_bottom,
     "vxlan_geneve_parity": scenario_vxlan_geneve_parity,
+    # Vendor VxLAN (2026.1/2026.2 release-note bugs)
+    "arista_vxlan_order": scenario_arista_vxlan_order,
+    "sonic_vlan_before_trunk": scenario_sonic_vlan_before_trunk,
+    "arista_cleanup_filter": scenario_arista_cleanup_filter,
+    "arista_unplug_needs_vni": scenario_arista_unplug_needs_vni,
+    "segment_id_cleanup": scenario_segment_id_cleanup,
+    "ovn_lldp_bridge_filter": scenario_ovn_lldp_bridge_filter,
 }
 
 # For sweep we treat each scenario as a separate determinism check
