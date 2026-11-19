@@ -16,6 +16,12 @@ from tracks.ngs_sim.scenario import (
     scenario_refcount_stale_vlan,
     scenario_trunk_subport,
 )
+from tracks.ngs_sim.vxlan import (
+    scenario_geneve_multi_switch,
+    scenario_vxlan_geneve_parity,
+    scenario_vxlan_multi_switch,
+    scenario_vxlan_top_bottom,
+)
 
 SCENARIOS = {
     "basic": scenario_basic,
@@ -25,6 +31,11 @@ SCENARIOS = {
     "multi_switch_ref": scenario_multi_switch_ref_bug,
     "concurrent": scenario_concurrent_plug,
     "concurrent_faults": scenario_concurrent_with_faults,
+    # VxLAN / L2VNI (explicit — see 02b doc, gap analysis §1)
+    "vxlan_multi_switch": scenario_vxlan_multi_switch,
+    "geneve_multi_switch": scenario_geneve_multi_switch,
+    "vxlan_top_bottom": scenario_vxlan_top_bottom,
+    "vxlan_geneve_parity": scenario_vxlan_geneve_parity,
 }
 
 # For sweep we treat each scenario as a separate determinism check
