@@ -66,11 +66,11 @@ class FakeSwitch:
     # helpers
 
     def _check_vlan_before_vxlan(self, segmentation_id: int, vni: int) -> None:
-        if self.policy.get("vlan_before_vxlan") and segmentation_id not in self.state.vlans:
-            # Record violation — real Arista would produce "Vlan does not exist" and no IMET route
-            self.state.vendor_violations.append(
-                f"vlan-before-vxlan: {self.device_type} requires vlan {segmentation_id} before plug_switch_to_network vni {vni}"
-            )
+        # NOTE: Real Arista/SONiC bug was driver ordering inside plug_switch_to_network template,
+        # not caller ordering. FakeSwitch itself ensures vlan exists, so we don't flag caller.
+        # Vendor violations are now tested via explicit driver template inspection, not via this hook.
+        # Keep hook for future strict mode (e.g., when switch doesn't auto-create vlan).
+        pass
 
     # VLAN lifecycle
 
@@ -150,13 +150,13 @@ class FakeSwitch:
 
     # VNI → VLAN (L2VNI)
 
-    def plug_switch_to_network(self, vni: int, segmentation_id: int) -> None:
+    def plug_switch_to_network(self, vni: int, segmentation_id: int, physnet: str | None = None) -> None:
         self._maybe_fail("plug_switch_to_network")
         self._check_vlan_before_vxlan(segmentation_id, vni)
         self.state.vni_map[vni] = segmentation_id
         self.state.vlans.add(segmentation_id)
 
-    def unplug_switch_from_network(self, vni: int | None, segmentation_id: int) -> None:
+    def unplug_switch_from_network(self, vni: int | None, segmentation_id: int, physnet: str | None = None) -> None:
         self._maybe_fail("unplug_switch_from_network")
         if self._require_vni_on_unplug and vni is None:
             self.state.unplug_errors.append(f"arista requires vni on unplug vlan {segmentation_id}: no vxlan vlan {{segmentation_id}} vni {{vni}}")

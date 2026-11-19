@@ -155,6 +155,8 @@ class NGSAdapter:
         status: str = const.PORT_STATUS_DOWN,
     ) -> FakePortContext:
         si = switch_info or self.switch_name
+        from neutron_lib.api.definitions import portbindings as pb
+
         port: dict = {
             "id": port_id,
             "binding:profile": {
@@ -163,6 +165,8 @@ class NGSAdapter:
                 ]
             },
             "binding:host_id": "host1",
+            "binding:vnic_type": pb.VNIC_BAREMETAL,
+            "binding:vif_type": pb.VIF_TYPE_OTHER,
             "status": status,
             "fixed_ips": [],
         }
