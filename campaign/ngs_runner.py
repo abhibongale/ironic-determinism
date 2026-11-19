@@ -30,6 +30,7 @@ from tracks.ngs_sim.vxlan import (
     scenario_vxlan_multi_switch,
     scenario_vxlan_top_bottom,
 )
+from tracks.ngs_sim.buggy_switch import scenario_buggy_ssh_leak, scenario_fixed_ssh_leak
 
 SCENARIOS = {
     "basic": scenario_basic,
@@ -51,6 +52,8 @@ SCENARIOS = {
     "arista_unplug_needs_vni": scenario_arista_unplug_needs_vni,
     "segment_id_cleanup": scenario_segment_id_cleanup,
     "ovn_lldp_bridge_filter": scenario_ovn_lldp_bridge_filter,
+    "buggy_ssh_leak": scenario_buggy_ssh_leak,
+    "fixed_ssh_leak": scenario_fixed_ssh_leak,
 }
 
 # For sweep we treat each scenario as a separate determinism check
