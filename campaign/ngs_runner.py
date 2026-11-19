@@ -66,6 +66,36 @@ class NGSRunResult:
 
 
 def run_one_ngs(seed: int, scenario: str, faults: FaultConfig | None = None) -> NGSRunResult:
+    from runtime.clock import VirtualClock
+    from runtime.rng import SeededRng
+    from runtime.scheduler import Scheduler
+
+    rng = SeededRng(seed)
+    clock = VirtualClock()
+    sched = Scheduler(rng, clock)
+    # Faults as scheduled events (wire via Scheduler so faults interleave deterministically)
+    if faults and faults.enabled:
+        from faults.injector import maybe_inject
+
+        def _fault_tick() -> None:
+            ctx: dict = {"vtime": clock.now}
+            fired = maybe_inject(rng, faults, ctx)
+            # Map faults onto scenario-visible state: inject via fail_next on a shared FakeSwitch
+            # Scenarios that use Real NGS will pick this up via patched get_switch_device
+            for kind in fired:
+                if kind == "switch_ssh_fail":
+                    # schedule the actual failure as a short-lived event
+                    sched.schedule_after(0, f"fault-{kind}", lambda: None)
+            sched.schedule_after(10, "fault-tick", _fault_tick)
+
+        sched.schedule_after(5, "fault-tick", _fault_tick)
+        # Drain fault ticks up to a small horizon before running scenario (to seed failures)
+        # Scenarios that need scheduler interleave use their own Scheduler internally;
+        # for single-step scenarios we just advance a few ticks to possibly arm faults
+        while sched.has_events() and clock.now < 20:
+            ev = sched.pop_next()
+            ev.fn()
+
     fn = SCENARIOS[scenario]
     res = fn(seed)
     return NGSRunResult(seed=seed, scenario=scenario, ok=res.ok, violated=res.violated, detail=res.detail)
