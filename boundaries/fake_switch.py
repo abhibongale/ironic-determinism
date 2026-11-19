@@ -66,11 +66,11 @@ class FakeSwitch:
     # helpers
 
     def _check_vlan_before_vxlan(self, segmentation_id: int, vni: int) -> None:
-        # NOTE: Real Arista/SONiC bug was driver ordering inside plug_switch_to_network template,
-        # not caller ordering. FakeSwitch itself ensures vlan exists, so we don't flag caller.
-        # Vendor violations are now tested via explicit driver template inspection, not via this hook.
-        # Keep hook for future strict mode (e.g., when switch doesn't auto-create vlan).
-        pass
+        if self.policy.get("vlan_before_vxlan") and segmentation_id not in self.state.vlans:
+            # Record violation — real Arista would produce "Vlan does not exist" and no IMET route
+            self.state.vendor_violations.append(
+                f"vlan-before-vxlan: {self.device_type} requires vlan {segmentation_id} before plug_switch_to_network vni {vni}"
+            )
 
     # VLAN lifecycle
 
