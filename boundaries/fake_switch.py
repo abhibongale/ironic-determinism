@@ -78,6 +78,7 @@ class FakeSwitch:
         for vid in segmentation_ids:
             s.add(vid)
             self.state.vlan_refcount[vid] = self.state.vlan_refcount.get(vid, 0) + 1
+            self.state.vlans.add(vid)
 
     def del_subports_on_trunk(self, port: str, segmentation_ids: list[int]) -> None:
         self._maybe_fail("del_subports")

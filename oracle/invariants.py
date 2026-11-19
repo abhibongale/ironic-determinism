@@ -35,12 +35,32 @@ def _ngs_checks(switches: list[Any]) -> list[str]:
         st = sw.state
         for vlan, cnt in st.vlan_refcount.items():
             if cnt < 0:
-                v.append("N1")
-            # N1: mapping present iff refcount>0 ; if VNI maps to vlan with 0 refs it's stale
-            if cnt == 0 and vlan in st.vlans and any(val == vlan for val in st.vni_map.values()):
-                # allowed: vlan can exist without ports (add_network without plug); only flag if we want strict
-                pass
-        # N3: no duplicate vlan entries beyond set semantics — implicitly via set
+                if "N1" not in v:
+                    v.append("N1")
+        # N1: stale VNI mapping — VNI points to vlan that has no ports and vlan itself gone/leaked
+        # We flag only the clear leak: vlan in vni_map but refcount==0 and vlan still present without any port
+        for vni, vlan in st.vni_map.items():
+            cnt = st.vlan_refcount.get(vlan, 0)
+            if cnt == 0 and vlan not in st.vlans:
+                # VNI points to non-existent vlan → dangling (N1)
+                if "N1" not in v:
+                    v.append("N1")
+        # N2: trunk subport completeness — every trunk vlan must be in vlans
+        for trunk, vlans in st.trunk_vlans.items():
+            for vid in vlans:
+                if vid not in st.vlans:
+                    if "N2" not in v:
+                        v.append("N2")
+        # N3: drift — port points to vlan not in vlans
+        for port, vlan in st.port_vlan.items():
+            if vlan not in st.vlans:
+                if "N3" not in v:
+                    v.append("N3")
+        for trunk, vlans in st.trunk_vlans.items():
+            for vid in vlans:
+                if vid not in st.vlans:
+                    if "N3" not in v:
+                        v.append("N3")
     return v
 
 
