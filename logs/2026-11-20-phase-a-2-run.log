@@ -1,0 +1,62 @@
+=== 2026-11-19T20:24:58+00:00 — Phase A step 2 (hypothesis) full run ===
+repo: b197f25 b197f25 feat: 2->1 — hypothesis stateful + stubbed NGS adapter (skip in lightweight)
+host: Linux abongale-thinkpadx1carbongen11.wtrfrdii.csb 7.3.4-300.fc45.x86_64 #1 SMP PREEMPT_DYNAMIC Wed Nov 11 00:15:32 UTC 2026 x86_64 GNU/Linux
+
+--- pytest tests/test_ngs_stateful.py tests/test_vxlan_stateful.py -v --tb=short ---
+============================= test session starts ==============================
+platform linux -- Python 3.15.2, pytest-9.2.0, pluggy-1.6.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: /home/abongale/Workspace/repos/ironic-determinism
+configfile: pyproject.toml
+plugins: hypothesis-6.170.15, cov-7.1.0, platformdirs-4.13.5, anyio-4.15.1
+collecting ... collected 2 items
+
+../ironic-determinism/tests/test_ngs_stateful.py::TestNGSSwitch::runTest PASSED [ 50%]
+../ironic-determinism/tests/test_vxlan_stateful.py::TestVxLANSuite::runTest PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../.local/lib/python3.15/site-packages/_pytest/config/__init__.py:1636
+  /home/abongale/.local/lib/python3.15/site-packages/_pytest/config/__init__.py:1636: PytestConfigWarning: Unknown config option: asyncio_mode
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+========================= 2 passed, 1 warning in 3.16s =========================
+
+--- pytest -q (full suite) ---
+........ssss...........................                                  [100%]
+=============================== warnings summary ===============================
+../../../.local/lib/python3.15/site-packages/_pytest/config/__init__.py:1636
+  /home/abongale/.local/lib/python3.15/site-packages/_pytest/config/__init__.py:1636: PytestConfigWarning: Unknown config option: asyncio_mode
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+35 passed, 4 skipped, 1 warning in 1.82s
+
+--- campaign: ngs_runner --seeds 500 --scenario all ---
+NGS sweep 500 seeds (all scenarios): 0 failures
+
+--- hypothesis health: test_ngs_stateful with --hypothesis-seed=42 ---
+============================= test session starts ==============================
+platform linux -- Python 3.15.2, pytest-9.2.0, pluggy-1.6.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: /home/abongale/Workspace/repos/ironic-determinism
+configfile: pyproject.toml
+plugins: hypothesis-6.170.15, cov-7.1.0, platformdirs-4.13.5, anyio-4.15.1
+collecting ... collected 1 item
+
+../ironic-determinism/tests/test_ngs_stateful.py::TestNGSSwitch::runTest PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../.local/lib/python3.15/site-packages/_pytest/config/__init__.py:1636
+  /home/abongale/.local/lib/python3.15/site-packages/_pytest/config/__init__.py:1636: PytestConfigWarning: Unknown config option: asyncio_mode
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+========================= 1 passed, 1 warning in 0.58s =========================
+
+--- end 2026-11-19T20:25:05+00:00 ---
