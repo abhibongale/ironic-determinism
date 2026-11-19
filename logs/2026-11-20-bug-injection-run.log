@@ -1,0 +1,21 @@
+........ssss...........................                                  [100%]
+=============================== warnings summary ===============================
+../../../.local/lib/python3.15/site-packages/_pytest/config/__init__.py:1636
+  /home/abongale/.local/lib/python3.15/site-packages/_pytest/config/__init__.py:1636: PytestConfigWarning: Unknown config option: asyncio_mode
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+35 passed, 4 skipped, 1 warning in 1.61s
+=== Running buggy duplicate test (should fail, demonstrating N1) ===
+Buggy refcount for vlan 100: 2 (expected 1, got 2)
+EXPECTED FAILURE: REFCOUNT BUG: 1 unique vs 2 refcount — duplicate localnet event double counted
+Hypothesis would shrink this to 2-step minimal: add_network -> plug same port twice
+
+=== Running fixed test (should pass) ===
+Fixed: duplicate event ignored (idempotent)
+Fixed refcount: 1 (expected 1)
+FIXED: no leak
+PASSED
+
+=== Full suite after fix ===

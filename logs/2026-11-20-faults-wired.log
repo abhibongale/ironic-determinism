@@ -1,0 +1,7 @@
+=== 2026-11-19T20:40:02+00:00 Phase A faults wired — buggy vs fixed ===
+buggy:
+NGS sweep 200 seeds (buggy_ssh_leak): 106 failures
+fixed:
+NGS sweep 200 seeds (fixed_ssh_leak): 0 failures
+all:
+NGS sweep 500 seeds (all scenarios): 0 failures
