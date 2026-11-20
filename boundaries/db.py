@@ -18,6 +18,8 @@ class NodeRecord:
     target_state: Optional[str] = None
     owner: Optional[str] = None
     lessee: Optional[str] = None
+    # history for S3 legal-edge check + S4 stale-token
+    state_history: list[str] = field(default_factory=list)
 
 
 @dataclass

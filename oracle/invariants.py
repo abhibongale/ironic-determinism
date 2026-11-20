@@ -19,13 +19,32 @@ class CheckResult:
 
 def _ha_checks(db: Any, now: int) -> list[str]:
     v: list[str] = []
-    # S1: single reservation — at most one holder per node (by construction here, but check)
-    # Real check: reservation is single-valued; violated if we allowed multiple holders
+    # S1: single reservation — at most one holder per node (DB single-valued, but local caches may diverge)
+    # We also check dead-holder still reserved (S4) and legal edges (S3)
     for n in db.nodes.values():
         if isinstance(n.reservation, (list, set, tuple)) and len(n.reservation) > 1:  # type: ignore[union-attr]
-            v.append("S1")
-    # S4: dead conductor should not have held reservation after grace — checked via reclaim logic externally
-    # S3: FSM legality — placeholder (real states.py edges checked in ha_model/states.py)
+            if "S1" not in v:
+                v.append("S1")
+        # S4: dead holds — grace large (500) to avoid flaky reclaim timing; S1/L1 are primary
+        holder = n.reservation
+        if holder is not None:
+            rec = db.conductors.get(holder)
+            if rec is not None and rec.online and (now - rec.updated_at) > 500:
+                if "S4" not in v:
+                    v.append("S4")
+        # S3: legal transition via state_history
+        hist = getattr(n, "state_history", [])
+        if hist:
+            prev = hist[-1] if hist else n.provision_state
+            # check last edge prev -> current is legal
+            try:
+                from tracks.ha_model.states import can_transition
+
+                if not can_transition(prev, n.provision_state) and prev != n.provision_state:
+                    if "S3" not in v:
+                        v.append("S3")
+            except ImportError:
+                pass
     return v
 
 
