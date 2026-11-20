@@ -20,6 +20,10 @@ class NodeRecord:
     lessee: Optional[str] = None
     # history for S3 legal-edge check + S4 stale-token
     state_history: list[str] = field(default_factory=list)
+    # SEC2: stale IPA token — issued on reserve, invalidated on steal/release
+    ipa_token: Optional[str] = None
+    token_holder: Optional[str] = None
+    token_seq: int = 0
 
 
 @dataclass
@@ -65,6 +69,9 @@ class InMemoryDb:
         n = self.nodes[node_uuid]
         if n.reservation is None:
             n.reservation = holder
+            n.token_seq += 1
+            n.ipa_token = f"token-{node_uuid}-{holder}-{n.token_seq}"
+            n.token_holder = holder
             return True
         return False
 
@@ -72,9 +79,22 @@ class InMemoryDb:
         n = self.nodes[node_uuid]
         if n.reservation == holder:
             n.reservation = None
+            n.ipa_token = None
+            n.token_holder = None
             return True
         return False
 
     def steal(self, node_uuid: str, new_holder: str) -> None:
-        """Forced reclaim after dead-holder detection."""
-        self.nodes[node_uuid].reservation = new_holder
+        """Forced reclaim after dead-holder detection — invalidates old token."""
+        n = self.nodes[node_uuid]
+        n.reservation = new_holder
+        n.token_seq += 1
+        n.ipa_token = f"token-{node_uuid}-{new_holder}-{n.token_seq}"
+        n.token_holder = new_holder
+
+    def validate_token(self, node_uuid: str, token: str) -> bool:
+        """SEC2: stale token rejected after steal/release."""
+        n = self.nodes.get(node_uuid)
+        if not n or not n.ipa_token:
+            return False
+        return n.ipa_token == token

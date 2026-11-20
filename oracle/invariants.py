@@ -35,7 +35,6 @@ def _ha_checks(db: Any, now: int, conductors: list[Any] | None = None) -> list[s
                         v.append("S1")
                 else:
                     seen[nid] = c.id
-        # Also check DB reservation type confusion
         for n in db.nodes.values():
             if isinstance(n.reservation, (list, set, tuple)) and len(n.reservation) > 1:  # type: ignore[union-attr]
                 if "S1" not in v:
@@ -45,7 +44,8 @@ def _ha_checks(db: Any, now: int, conductors: list[Any] | None = None) -> list[s
             if isinstance(n.reservation, (list, set, tuple)) and len(n.reservation) > 1:  # type: ignore[union-attr]
                 if "S1" not in v:
                     v.append("S1")
-    # S4: dead holds — grace large (500) to avoid flaky reclaim timing; S1/L1 are primary
+    # S4: dead holds — grace large (500)
+    # SEC2: stale token — if token_holder != reservation holder, token is stale (steal without cache clear)
     for n in db.nodes.values():
         holder = n.reservation
         if holder is not None:
@@ -53,6 +53,10 @@ def _ha_checks(db: Any, now: int, conductors: list[Any] | None = None) -> list[s
             if rec is not None and rec.online and (now - rec.updated_at) > 500:
                 if "S4" not in v:
                     v.append("S4")
+            # SEC2: token_holder divergence
+            if n.token_holder is not None and n.token_holder != holder:
+                if "SEC2" not in v:
+                    v.append("SEC2")
         # S3: legal transition via state_history
         hist = getattr(n, "state_history", [])
         if hist:
@@ -65,6 +69,16 @@ def _ha_checks(db: Any, now: int, conductors: list[Any] | None = None) -> list[s
                         v.append("S3")
             except ImportError:
                 pass
+    # S4 extended: dead conductor's local_reserved still references node now held by live (stale cache)
+    if conductors is not None:
+        for c in conductors:
+            rec = db.conductors.get(c.id)
+            if rec and rec.online and (now - rec.updated_at) > 500:
+                for nid in getattr(c, "local_reserved", set()):
+                    n = db.nodes.get(nid)
+                    if n and n.reservation is not None and n.reservation != c.id:
+                        if "S4" not in v:
+                            v.append("S4")
     return v
 
 
