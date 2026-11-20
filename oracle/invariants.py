@@ -17,15 +17,36 @@ class CheckResult:
         return not self.ok
 
 
-def _ha_checks(db: Any, now: int) -> list[str]:
+def _ha_checks(db: Any, now: int, conductors: list[Any] | None = None) -> list[str]:
     v: list[str] = []
-    # S1: single reservation — at most one holder per node (DB single-valued, but local caches may diverge)
-    # We also check dead-holder still reserved (S4) and legal edges (S3)
+    # S1: split-brain — two live conductors' local_reserved contain same node (stale stall path)
+    if conductors is not None:
+        seen: dict[str, str] = {}
+        for c in conductors:
+            live = False
+            rec = db.conductors.get(c.id)
+            if rec and rec.online and (now - rec.updated_at) <= 60:
+                live = True
+            if not live:
+                continue
+            for nid in getattr(c, "local_reserved", set()):
+                if nid in seen and seen[nid] != c.id:
+                    if "S1" not in v:
+                        v.append("S1")
+                else:
+                    seen[nid] = c.id
+        # Also check DB reservation type confusion
+        for n in db.nodes.values():
+            if isinstance(n.reservation, (list, set, tuple)) and len(n.reservation) > 1:  # type: ignore[union-attr]
+                if "S1" not in v:
+                    v.append("S1")
+    else:
+        for n in db.nodes.values():
+            if isinstance(n.reservation, (list, set, tuple)) and len(n.reservation) > 1:  # type: ignore[union-attr]
+                if "S1" not in v:
+                    v.append("S1")
+    # S4: dead holds — grace large (500) to avoid flaky reclaim timing; S1/L1 are primary
     for n in db.nodes.values():
-        if isinstance(n.reservation, (list, set, tuple)) and len(n.reservation) > 1:  # type: ignore[union-attr]
-            if "S1" not in v:
-                v.append("S1")
-        # S4: dead holds — grace large (500) to avoid flaky reclaim timing; S1/L1 are primary
         holder = n.reservation
         if holder is not None:
             rec = db.conductors.get(holder)
@@ -36,7 +57,6 @@ def _ha_checks(db: Any, now: int) -> list[str]:
         hist = getattr(n, "state_history", [])
         if hist:
             prev = hist[-1] if hist else n.provision_state
-            # check last edge prev -> current is legal
             try:
                 from tracks.ha_model.states import can_transition
 
@@ -97,10 +117,11 @@ def check_all(
     switches: list[Any] | None = None,
     operator_resources: dict[str, Any] | None = None,
     now: int = 0,
+    conductors: list[Any] | None = None,
 ) -> CheckResult:
     violated: list[str] = []
     if db is not None:
-        violated.extend(_ha_checks(db, now))
+        violated.extend(_ha_checks(db, now, conductors=conductors))
     if switches is not None:
         violated.extend(_ngs_checks(switches))
     if operator_resources is not None:

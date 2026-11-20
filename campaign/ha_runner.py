@@ -92,7 +92,7 @@ def run_one_ha(seed: int, faults: FaultConfig | None = None, n_nodes: int = 6, m
             break
         ev = sched.pop_next()
         ev.fn()
-        res = check_all(db=db, now=clock.now)
+        res = check_all(db=db, now=clock.now, conductors=conductors)
         if res.failed:
             violated = res.violated
             break
